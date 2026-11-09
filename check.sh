@@ -99,6 +99,9 @@ Panne terminée à $(heure "$NOW"), durée : $(duration $((NOW - since)))."
   fi
   since="$NOW"; last_alert=0
   echo "OK : site et base en ligne"
+  if [ "${TEST_ALERT:-false}" = "true" ]; then
+    send "✅ Test du robot de surveillance : Morali Pay est en ligne (site et base). Tu seras prévenu ici en cas de panne." || exit 1
+  fi
 fi
 
 mkdir -p "$(dirname "$STATE_FILE")"
