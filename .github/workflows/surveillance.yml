@@ -1,0 +1,46 @@
+name: Surveillance Morali Pay
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # toutes les 5 minutes (GitHub peut parfois décaler de quelques minutes)
+  workflow_dispatch: {}      # bouton « Run workflow » pour tester à la main
+
+concurrency:
+  group: surveillance
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vérifier le site
+        id: check
+        continue-on-error: true
+        env:
+          SITE_URL: https://moralipay.com
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: bash check.sh
+
+      - name: Enregistrer l'état (et garder le robot actif)
+        run: |
+          git config user.name "morali-surveillance"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # GitHub met en pause les tâches planifiées d'un dépôt sans activité depuis 60 jours :
+          # un petit commit tous les 30 jours l'en empêche.
+          last=$(git log -1 --format=%ct)
+          if [ $(( $(date +%s) - last )) -gt 2592000 ]; then date -u +%FT%TZ > state/keepalive; fi
+          git add -A state
+          git diff --cached --quiet || { git commit -m "État : $(grep status= state/status | cut -d= -f2)"; git push; }
+
+      - name: Panne en cours
+        if: steps.check.outcome == 'failure'
+        run: |
+          echo "::error::Morali Pay ne répond pas correctement (voir l'étape « Vérifier le site »)."
+          exit 1
