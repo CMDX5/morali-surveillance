@@ -5,7 +5,8 @@
 # Vérifie :
 #   1. la page d'accueil répond (200) et contient bien « Morali » (pas une page d'erreur vide) ;
 #   2. /api/health répond et la base de données est « connected » ;
-#   3. chaque réponse arrive en moins de MAX_SECONDS.
+#   3. chaque réponse arrive en moins de MAX_SECONDS ;
+#   4. les fichiers de l'app annoncés par la page se chargent (sinon : écran blanc chez les clients).
 # Chaque vérification est retentée 3 fois (20 s d'écart) avant de conclure à une panne,
 # pour éviter les fausses alertes.
 #
@@ -48,10 +49,32 @@ check() {
   return 1
 }
 
+# Page blanche après une mise à jour : la page répond mais ses fichiers de l'app (JavaScript)
+# sont introuvables. On vérifie que chaque fichier annoncé par la page d'accueil se charge.
+check_assets() {
+  local html i code missing=0 total=0 asset
+  html=$(curl -sS --max-time "$MAX_SECONDS" -A 'MoraliSurveillance/1.0' "$SITE_URL/" 2>/dev/null || true)
+  [ -z "$html" ] && { REASON="page d'accueil vide"; return 1; }
+  grep -q '/_next/static/' <<<"$html" || { REASON="la page ne charge aucun fichier de l'app (page blanche)"; return 1; }
+  for asset in $(grep -oE '/_next/static/[^"'"'"' )]+\.(js|css)' <<<"$html" | sort -u | head -25); do
+    total=$((total + 1))
+    for i in 1 2; do
+      code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time "$MAX_SECONDS" "$SITE_URL$asset" 2>/dev/null || echo 000)
+      [ "$code" = "200" ] && break
+      sleep 3
+    done
+    [ "$code" = "200" ] || missing=$((missing + 1))
+  done
+  [ "$missing" -eq 0 ] && return 0
+  REASON="$missing fichier(s) de l'app sur $total introuvable(s) : écran blanc probable"
+  return 1
+}
+
 PROBLEMS=()
 REASON=""
 check "$SITE_URL/" home       || PROBLEMS+=("Site ($SITE_URL) : $REASON")
 check "$SITE_URL/api/health" health || PROBLEMS+=("Serveur / base : $REASON")
+if [ ${#PROBLEMS[@]} -eq 0 ]; then check_assets || PROBLEMS+=("Fichiers de l'app : $REASON"); fi
 rm -f "$body_file"
 
 # --- état précédent
