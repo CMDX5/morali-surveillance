@@ -80,9 +80,14 @@ rm -f "$body_file"
 # --- état précédent
 prev_status="up"; since="$NOW"; last_alert=0
 if [ -f "$STATE_FILE" ]; then
-  # shellcheck disable=SC1090
-  . "$STATE_FILE"
-  prev_status="${status:-up}"; since="${since:-$NOW}"; last_alert="${last_alert:-0}"
+  # Lecture stricte clé=valeur : le fichier d'état n'est jamais exécuté comme du code.
+  while IFS='=' read -r key value || [ -n "$key" ]; do
+    case "$key" in
+      status)     [[ "$value" == "up" || "$value" == "down" ]] && prev_status="$value" ;;
+      since)      [[ "$value" =~ ^[0-9]+$ ]] && since="$value" ;;
+      last_alert) [[ "$value" =~ ^[0-9]+$ ]] && last_alert="$value" ;;
+    esac
+  done < "$STATE_FILE"
 fi
 
 send() {
