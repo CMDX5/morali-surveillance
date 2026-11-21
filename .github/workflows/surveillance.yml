@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "*/5 * * * *"   # toutes les 5 minutes (GitHub peut parfois décaler de quelques minutes)
   workflow_dispatch: {}      # bouton « Run workflow » pour tester à la main
+  # GitHub ne respecte pas les 5 minutes (en pratique ~3 lancements par jour). Un appel externe (cron-job.org,
+  # toutes les 5 min) déclenche une vraie vérification : POST /repos/CMDX5/morali-surveillance/dispatches
+  # avec {"event_type":"verifier"} et un jeton GitHub limité à ce dépôt (Actions : lecture et écriture).
+  repository_dispatch:
+    types: [verifier]
 
 concurrency:
   group: surveillance
